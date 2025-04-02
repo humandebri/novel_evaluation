@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from src.db.models import Novel, Episode
 from src.db.repository import save_evaluation, get_novel_episodes
 from .llm_client import LLMClient
-from .prompt_manager import PromptManager
 
 logger = logging.getLogger(__name__)
 
