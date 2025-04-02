@@ -5,7 +5,7 @@
 ## 機能
 
 - カクヨムの日刊ランキングから上位100タイトルを自動取得
-- 各小説の最初の3話を取得
+- 各小説の最初の1話を取得
 - LLM APIを使用して小説を評価（10点満点）
   - ストーリー性
   - 文章力
@@ -64,7 +64,7 @@ docker-compose up -d
 
 6. データベースの初期化
 ```bash
-python -m src.scripts.init_db
+python -m scripts.init_db
 ```
 
 ## 使用方法

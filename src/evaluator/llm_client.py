@@ -1,6 +1,7 @@
 import requests
 import json
 import logging
+import re
 from typing import Dict, Any, Optional, List
 from src.config import settings
 
@@ -90,15 +91,16 @@ class LLMClient:
 
 必ず以下のJSON形式で回答してください：
 ```json
-{
-  "story_score": 数値,
-  "writing_score": 数値,
-  "character_score": 数値,
-  "overall_score": 数値,
+{{
+  "story_score": 7.5,
+  "writing_score": 8.2,
+  "character_score": 6.8,
+  "overall_score": 7.5,
   "feedback": "詳細な評価コメント"
-}
+}}
 ```
 
+上記は例です。実際の評価では、数値は1.0から10.0の間の実数(小数点以下1桁)を使用し、feedbackには具体的な評価コメントを記入してください。
 評価は厳格かつ公平に行い、プロの文学評論家として真摯な評価を提供してください。
 """
         return prompt
@@ -141,8 +143,16 @@ class LLMClient:
         LLMのレスポンスからJSON部分を抽出して解析
         """
         try:
-            # JSONブロックを抽出
-            json_str = response.split("```json")[1].split("```")[0].strip()
+            # 正規表現を使用してJSONブロックを抽出
+            json_match = re.search(r'```(?:json)?\s*({.*?})\s*```', response, re.DOTALL)
+            
+            if json_match:
+                json_str = json_match.group(1).strip()
+            else:
+                # JSONブロックが見つからない場合、レスポンス全体をJSONとして解析してみる
+                json_str = response.strip()
+            
+            # JSONを解析
             evaluation = json.loads(json_str)
             
             # 必要なフィールドが含まれているか確認
@@ -150,6 +160,17 @@ class LLMClient:
             for field in required_fields:
                 if field not in evaluation:
                     raise ValueError(f"Missing required field: {field}")
+            
+            # 数値フィールドを確認し、文字列の場合は数値に変換
+            numeric_fields = ["overall_score", "story_score", "writing_score", "character_score"]
+            for field in numeric_fields:
+                if isinstance(evaluation[field], str):
+                    try:
+                        evaluation[field] = float(evaluation[field])
+                    except ValueError:
+                        # 数値に変換できない場合はデフォルト値を使用
+                        logger.warning(f"Could not convert {field} to float: {evaluation[field]}")
+                        evaluation[field] = 5.0
             
             return evaluation
             

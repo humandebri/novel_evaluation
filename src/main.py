@@ -25,7 +25,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def scrape_novels(session: Session, limit: int = 10):
+def scrape_novels(session: Session, limit: int = 100):
     """
     カクヨムからランキング上位の小説を取得してDBに保存
     """
@@ -37,8 +37,8 @@ def scrape_novels(session: Session, limit: int = 10):
     for novel in novels:
         logger.info(f"Processing novel: {novel['title']} by {novel['author']}")
         
-        # 小説の最初の3話を取得
-        episodes = scraper.get_novel_episodes(novel['id'], limit=3)
+        # 小説の最初の1話を取得
+        episode = scraper.get_first_episode(novel['id'])
         
         # DBに保存
         save_novel_data(
@@ -48,7 +48,7 @@ def scrape_novels(session: Session, limit: int = 10):
             author=novel['author'],
             ranking_position=novel['ranking_position'],
             novel_url=novel['novel_url'],
-            episodes=episodes
+            episodes=[episode]
         )
     
     logger.info(f"Completed scraping {len(novels)} novels")
