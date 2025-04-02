@@ -58,6 +58,15 @@ class LLMClient:
         """
         評価用のプロンプトを構築
         """
+        # エピソードテキストの長さを制限（7700文字まで）
+        truncated_episode_texts = []
+        for text in episode_texts:
+            if len(text) > 7700:
+                truncated_text = text[:7700] + "...(以下省略)"
+                truncated_episode_texts.append(truncated_text)
+            else:
+                truncated_episode_texts.append(text)
+
         prompt = f"""あなたはプロの文学評論家です。以下の小説を評価してください。
 
         タイトル: {title}
