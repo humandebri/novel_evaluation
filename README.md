@@ -42,8 +42,8 @@ cd novel_evaluation_system
 
 2. 仮想環境を作成してアクティベート
 ```bash
-python -m venv venv
-source venv/bin/activate  # Windowsの場合: venv\Scripts\activate
+python3.12 -m venv venv_py312
+source venv_py312/bin/activate
 ```
 
 3. 依存パッケージをインストール
