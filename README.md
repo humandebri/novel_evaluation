@@ -88,17 +88,6 @@ python -m src.main --results
 python -m src.main --limit 10
 ```
 
-### PGAdminへのアクセス
-
-データベースの内容を確認するには、ブラウザで以下のURLにアクセスします：
-```
-http://localhost:5050
-```
-
-ログイン情報：
-- Email: admin@example.com
-- Password: admin
-
 ## プロジェクト構造
 
 ```
