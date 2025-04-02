@@ -2,3 +2,4 @@ venv/
 logs/
 *.log
 .env
+venv_py312/
