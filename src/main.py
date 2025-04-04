@@ -9,11 +9,15 @@ import logging
 from src.db.database import SessionLocal
 from src.scraper.kakuyomu import KakuyomuScraper
 from src.evaluator.evaluator import NovelEvaluator
-from src.db.repository import get_novels_for_evaluation, save_novel_data, get_evaluation_results
+from src.db.repository import get_novels_for_evaluation, save_novel_data, get_evaluation_results, export_evaluation_results_to_csv
 
 # ロギング設定
 log_dir = "logs"
 os.makedirs(log_dir, exist_ok=True)
+# 結果ディレクトリも作成
+results_dir = "results"
+os.makedirs(results_dir, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -48,7 +52,7 @@ def scrape_novels(session: Session, limit: int = 100):
             author=novel['author'],
             ranking_position=novel['ranking_position'],
             novel_url=novel['novel_url'],
-            episodes=[episode]
+            episodes=[episode] if episode else None
         )
     
     logger.info(f"Completed scraping {len(novels)} novels")
@@ -81,7 +85,7 @@ def evaluate_novels(session: Session, limit: int = 100):
 
 def display_results(session: Session, limit: int = 10):
     """
-    評価結果を表示
+    評価結果を表示（総合評価スコア順）
     """
     results = get_evaluation_results(session, limit=limit)
     
@@ -89,7 +93,7 @@ def display_results(session: Session, limit: int = 10):
         print("No evaluation results found")
         return
     
-    print("\n===== 小説評価結果 =====\n")
+    print("\n===== 小説評価結果（総合評価スコア順） =====\n")
     
     for i, result in enumerate(results, 1):
         print(f"{i}. {result['title']} by {result['author']}")
@@ -98,8 +102,17 @@ def display_results(session: Session, limit: int = 10):
         print(f"   ストーリー: {result['story_score']:.1f}/10")
         print(f"   文章力: {result['writing_score']:.1f}/10")
         print(f"   キャラクター: {result['character_score']:.1f}/10")
+        print(f"   評価日: {result['evaluation_date'].strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"   評価コメント: {result['feedback'][:100]}...")
         print()
+    
+    # 評価結果をCSVに書き出し
+    from src.db.repository import export_evaluation_results_to_csv
+    export_filepath = "results/evaluation_results.csv"
+    if export_evaluation_results_to_csv(session, export_filepath):
+        print(f"\n評価結果を {export_filepath} にエクスポートしました。")
+    else:
+        print("\n評価結果のエクスポートに失敗しました。")
 
 def main():
     parser = argparse.ArgumentParser(description="カクヨム小説評価システム")

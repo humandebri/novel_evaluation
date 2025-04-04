@@ -58,14 +58,20 @@ class LLMClient:
         """
         評価用のプロンプトを構築
         """
-        # エピソードテキストの長さを制限（7700文字まで）
+        # エピソードテキストの長さを制限（7700文字まで）と短すぎる場合の警告
         truncated_episode_texts = []
         for text in episode_texts:
+            # 長すぎる場合は切り捨て
             if len(text) > 7700:
                 truncated_text = text[:7700] + "...(以下省略)"
                 truncated_episode_texts.append(truncated_text)
+            # 短すぎる場合は警告を出す
+            elif len(text) <= 100:
+                logger.warning(f"エピソードのテキストが短すぎます（{len(text)}文字）: {text[:50]}...")
+                truncated_episode_texts.append(text + "\n[警告: このエピソードは非常に短いため、十分な評価ができない可能性があります]")
             else:
                 truncated_episode_texts.append(text)
+
 
         prompt = f"""あなたはプロの文学評論家です。以下の小説を評価してください。
 
@@ -74,8 +80,6 @@ class LLMClient:
         以下のエピソードを読んで、小説の質を10点満点で評価してください。
         評価は絶対的な基準で行い、相対評価ではなく絶対評価としてください。
 
-        {'-' * 50}
-        {'-' * 50}
         {'-' * 50}
 
         {episode_texts[0]}

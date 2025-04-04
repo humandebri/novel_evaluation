@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, func
 from src.db.models import Novel, Episode, Evaluation
 import logging
 from datetime import datetime
@@ -77,8 +77,17 @@ def save_evaluation(
     scores: Dict[str, float],
     feedback: str
 ) -> bool:
-    """評価データを保存"""
+    """評価データを保存 - 同じ小説の既存の評価は削除"""
     try:
+        # 同じ小説の既存の評価を削除
+        existing_evaluations = session.query(Evaluation).filter(
+            Evaluation.novel_id == novel_id
+        ).all()
+        
+        for eval in existing_evaluations:
+            session.delete(eval)
+        
+        # 新しい評価を保存
         evaluation = Evaluation(
             novel_id=novel_id,
             episode_id=episode_id,
@@ -113,12 +122,16 @@ def get_novel_episodes(session: Session, novel_id: str, limit: int = 3) -> List[
         return []
 
 def get_evaluation_results(session: Session, limit: int = 100) -> List[Dict[str, Any]]:
-    """評価結果を取得"""
+    """評価結果を取得 - 重複なし、総合評価スコア順に並べ替え"""
     try:
         results = []
+        
+        # 最新の評価だけを取得し、総合評価スコアの降順で並べ替え
+        # PostgreSQLのDISTINCT ON構文に合わせて修正
         evaluations = session.query(Evaluation, Novel).\
             join(Novel, Evaluation.novel_id == Novel.id).\
-            order_by(desc(Evaluation.evaluation_date)).\
+            order_by(Evaluation.novel_id, desc(Evaluation.overall_score)).\
+            distinct(Evaluation.novel_id).\
             limit(limit).all()
             
         for eval, novel in evaluations:
@@ -135,49 +148,72 @@ def get_evaluation_results(session: Session, limit: int = 100) -> List[Dict[str,
                 "evaluation_date": eval.evaluation_date
             })
         
+        # 総合評価スコアで並べ替え
+        results = sorted(results, key=lambda x: x["overall_score"], reverse=True)
         return results
     except SQLAlchemyError as e:
         logger.error(f"Error retrieving evaluation results: {e}")
         return []
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
-from src.db.models import Novel, Episode
-import logging
 
-logger = logging.getLogger(__name__)
-
-def save_novel(session: Session, novel: Novel, episodes: list[Episode]) -> bool:
-    """小説データとエピソードデータを保存"""
+def has_existing_evaluation(session: Session, novel_id: str) -> bool:
+    """
+    指定された小説IDの評価が既に存在するかどうかを確認
+    
+    Args:
+        session: DBセッション
+        novel_id: 小説ID
+        
+    Returns:
+        評価が存在する場合はTrue、そうでない場合はFalse
+    """
     try:
-        # 既存データのチェック
-        existing_novel = session.query(Novel).get(novel.id)
-        if existing_novel:
-            logger.info(f"Novel {novel.id} already exists, updating data")
-            # 既存データの更新
-            for key, value in vars(novel).items():
-                if key != '_sa_instance_state' and key != 'id':
-                    setattr(existing_novel, key, value)
-        else:
-            session.add(novel)
-
-        # エピソードの保存
-        for episode in episodes:
-            existing_episode = session.query(Episode).get(episode.id)
-            if existing_episode:
-                logger.info(f"Episode {episode.id} already exists, updating data")
-                for key, value in vars(episode).items():
-                    if key != '_sa_instance_state' and key != 'id':
-                        setattr(existing_episode, key, value)
-            else:
-                session.add(episode)
-
-        session.commit()
-        return True
+        count = session.query(Evaluation).filter(Evaluation.novel_id == novel_id).count()
+        return count > 0
     except SQLAlchemyError as e:
-        logger.error(f"Database error occurred: {e}")
-        session.rollback()
-        return False
+        logger.error(f"Error checking existing evaluation: {e}")
+        # エラーの場合は安全側に倒して存在するとみなす
+        return True
+
+def export_evaluation_results_to_csv(session: Session, filepath: str) -> bool:
+    """
+    評価結果をCSVファイルにエクスポート
+    
+    Args:
+        session: DBセッション
+        filepath: 出力ファイルパス
+        
+    Returns:
+        成功した場合はTrue、失敗した場合はFalse
+    """
+    import csv
+    import os
+    
+    try:
+        # フォルダがなければ作成
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
+        # 全ての評価結果を取得（制限なし）
+        results = get_evaluation_results(session, limit=10000)
+        
+        if not results:
+            logger.warning("No evaluation results to export")
+            return False
+            
+        # CSVファイルに書き出し
+        with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = [
+                "novel_id", "title", "author", "ranking", 
+                "overall_score", "story_score", "writing_score", "character_score", 
+                "feedback", "evaluation_date"
+            ]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            writer.writeheader()
+            for result in results:
+                writer.writerow(result)
+                
+        logger.info(f"Exported {len(results)} evaluation results to {filepath}")
+        return True
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        session.rollback()
+        logger.error(f"Error exporting evaluation results to CSV: {e}")
         return False

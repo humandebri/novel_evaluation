@@ -1,9 +1,10 @@
 import logging
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
+from datetime import datetime
 
 from src.db.models import Novel, Episode
-from src.db.repository import save_evaluation, get_novel_episodes
+from src.db.repository import save_evaluation, get_novel_episodes, has_existing_evaluation
 from .llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,11 @@ class NovelEvaluator:
                 logger.error(f"Novel with ID {novel_id} not found")
                 return None
             
+            # 既存の評価があるかをチェック
+            if has_existing_evaluation(self.session, novel_id):
+                logger.info(f"Novel {novel.title} already has evaluation, skipping...")
+                return None
+            
             # エピソード情報の取得
             episodes = get_novel_episodes(self.session, novel_id, limit=3)
             if not episodes:
@@ -56,20 +62,19 @@ class NovelEvaluator:
                 episodes=episode_data
             )
             
-            # 評価結果の保存
-            for ep in episodes:
-                save_evaluation(
-                    session=self.session,
-                    novel_id=novel_id,
-                    episode_id=ep.id,
-                    scores={
-                        'overall': evaluation['overall_score'],
-                        'story': evaluation['story_score'],
-                        'writing': evaluation['writing_score'],
-                        'character': evaluation['character_score']
-                    },
-                    feedback=evaluation['feedback']
-                )
+            # 評価結果の保存 - 最初のエピソードに対してのみ保存
+            save_evaluation(
+                session=self.session,
+                novel_id=novel_id,
+                episode_id=episodes[0].id if episodes else None,
+                scores={
+                    'overall': evaluation['overall_score'],
+                    'story': evaluation['story_score'],
+                    'writing': evaluation['writing_score'],
+                    'character': evaluation['character_score']
+                },
+                feedback=evaluation['feedback']
+            )
             
             logger.info(f"Novel {novel.title} evaluated with score {evaluation['overall_score']}")
             return evaluation
